@@ -7,6 +7,9 @@ Output sequences will be denoted by Y
 The MPO transforming x to y will be denoted by W
 """
 
+
+
+
 """
 This function optimizes W at index idx
 """
