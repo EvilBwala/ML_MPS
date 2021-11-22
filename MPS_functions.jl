@@ -213,7 +213,6 @@ end
 This function runs one sweep
 """
 function one_sweep(X::Vector{MPS}, Y::Vector{MPS}, W::MPO, alpha::Float64)::MPO
-    N = length(X)
     L = length(X[1])
     # Forward sweep
     for i in 1:L
@@ -221,7 +220,7 @@ function one_sweep(X::Vector{MPS}, Y::Vector{MPS}, W::MPO, alpha::Float64)::MPO
         W[i] = single_site_optimizer(X, Y, W, i, alpha)
     end
     # Backward sweep
-    for i in reverse(1:L)
+    for i in reverse(1:L-1)
         println(i)
         W[i] = single_site_optimizer(X, Y, W, i, alpha)
     end

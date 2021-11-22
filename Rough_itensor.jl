@@ -1,5 +1,6 @@
 using ITensors
 using LinearAlgebra
+include("MPS_functions.jl")
 
 L = 10;
 sig_dims = 2;
@@ -45,6 +46,7 @@ X = [x, 2*x]
 Y = [y, 2*y]
 
 
+"""
 #----------------------------------------------------------------------------------------------------
 # All down below will become a part of MPS_functions.jl
 
@@ -136,3 +138,9 @@ W_arr = reshape(W_mat, (dU[1], dU[2], dU[3], dU[4])); # Converting the matrix W[
 
 W_tensor = ITensor(W_arr, idU); # Conevrting the array W[l] to an appropriate tensor
 
+"""
+
+for s in 1:4
+    global W
+    W = one_sweep(X, Y, W, 0.01);
+end
