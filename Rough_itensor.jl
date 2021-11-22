@@ -21,9 +21,15 @@ for i in 1:L+1
         ind_tau[i] = Index(tau_dims, "y"); #Index for outputs
     end
     
-    ind_a[i] = Index(D); #Linker indices for X
-    ind_b[i] = Index(W_linkers[i]); #Linker indices for W
-    ind_c[i] = Index(D); #Linker indices for Y
+    ind_a[i] = Index(D, "xlink"); #Linker indices for X
+    ind_b[i] = Index(W_linkers[i], "Wlink"); #Linker indices for W
+    ind_c[i] = Index(D, "ylink"); #Linker indices for Y
+
+    if (i == 1 || i == L+1)
+        ind_a[i] = addtags(ind_a[i], "bdary");
+        ind_b[i] = addtags(ind_b[i], "bdary");
+        ind_c[i] = addtags(ind_c[i], "bdary"); 
+    end
 end
 
 x = MPS(L);
@@ -35,6 +41,9 @@ for i in 1:L
     y[i] = randomITensor(ind_tau[i], ind_c[i], ind_c[i+1]); # y is a MPS now
     W[i] = randomITensor(ind_sig[i], ind_tau[i], ind_b[i], ind_b[i+1]); # W is a MPO now
 end
+X = [x, 2*x]
+Y = [y, 2*y]
+
 
 #----------------------------------------------------------------------------------------------------
 # All down below will become a part of MPS_functions.jl
@@ -51,11 +60,13 @@ xT = prime(x);
 WT = prime(W, W_b_ind);
 WT = prime(WT, W_sig_ind);
 
+l = 4;
+
 #-------------------------------------------------------------------------------------
 # Constructing A, B and F tensors
 #-------------------------------------------------------------------------------------
 A = delta(a_ind[1], W_b_ind[1], a_ind[1]', W_b_ind[1]');
-l = 4;
+
 for k in 1:l-1
     A = A*x[k]*W[k]*WT[k]*xT[k];
 end
@@ -124,5 +135,4 @@ W_mat = inv(G_mat)*U_mat; # New W[l] matrix
 W_arr = reshape(W_mat, (dU[1], dU[2], dU[3], dU[4])); # Converting the matrix W[l] into an Array
 
 W_tensor = ITensor(W_arr, idU); # Conevrting the array W[l] to an appropriate tensor
-
 
