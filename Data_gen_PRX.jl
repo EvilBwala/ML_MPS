@@ -87,6 +87,26 @@ function one_sweep_for_psi(psi::MPS, D::Int64, v_data::Vector{Vector{Int64}}, et
     return psi
 end
 
+
+"""
+This function calculates the Shannon entropy of the dataset v_data
+"""
+
+function shannon_ent(v_data::Vector{Vector{Int64}})
+    data_freq = [];
+    v_datac = copy(v_data)
+    L = length(v_datac)
+    while v_datac!=[]
+        deleteat!(v_datac, findall(x->x==v_datac[1], v_datac));
+        push!(data_freq, L - length(v_datac));
+        L = length(v_datac);
+    end
+    prb = (1/sum(data_freq))*data_freq;
+    Sentropy = -sum(prb .* log.(prb));
+    return Sentropy
+end
+
+
 """
 This function constructs the optimal psi given data in the form of a vector of vectors
 """
@@ -123,11 +143,13 @@ function find_optimal_psi(v_data::Vector{Vector{Int64}}, dim_of_spins::Int64, D:
     #-----------------------------------------------------------------------------------------------------------------
 
     err = 1;
+    s_ent = shannon_ent(v_data);
+
     steps = 0;
     while (abs(err)>tolerance && steps<max_steps)
         s = [(psi_v(psi, v)[])/sqrt(inner(psi, psi)) for v in v_data];
         lkhood = [-log(i*i) for i in s];
-        err = sum(lkhood)/N_data;
+        err = s_ent - sum(lkhood)/N_data;
         psi = one_sweep_for_psi(psi, D, v_data, eta);
         steps += 1;
         println("Sweep no.", steps, "  Error is ", abs(err))

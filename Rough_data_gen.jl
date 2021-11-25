@@ -193,5 +193,24 @@ end
 # Calculating Shannon entropy of a dataset
 #-----------------------------------------------------------------------------------------------------------------------
 
+L = 10;
+b = Binomial();
+v_data = [rand(b, L) .+ 1 for i in 1:1000];
+
+function shannon_ent(v_data::Vector{Vector{Int64}})
+    data_freq = [];
+    v_datac = copy(v_data)
+    L = length(v_datac)
+    while v_datac!=[]
+        deleteat!(v_datac, findall(x->x==v_datac[1], v_datac));
+        push!(data_freq, L - length(v_datac));
+        L = length(v_datac);
+    end
+    prb = (1/sum(data_freq))*data_freq;
+    Sentropy = sum(prb .* log.(prb));
+    return Sentropy
+end
+
+
 
 
