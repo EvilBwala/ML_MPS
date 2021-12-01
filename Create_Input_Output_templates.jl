@@ -1,3 +1,18 @@
+"""
+This code creates templates for the Input and Output MPS.
+More specifically, it ensures that all the training data have the same
+sigma (input) and tau (output) index.
+The nomenclature sigma and tau are in accordance with the PRE paper.
+INPUT: 
+ARGS[1] = Length of the MPS - e.g. for 20 sites it is 20.
+ARGS[2] = sig_dims - Dimensionality of input, e.g. for Michael's system it is 2.
+ARGS[3] = tau_dims - Dimensionality of the feature space, e.g. it is 2 for our current feature space.
+OUTPUT: 
+It creates a folder IO_Templates if it doesn't already exist and puts the input
+and output templates in a file named, xy_template.L.sig.tau.h5. This file contains
+the x and y template at the dictionary indices, x_template and y_template.
+"""
+
 using ITensors
 using LinearAlgebra
 using ITensors.HDF5
@@ -5,6 +20,8 @@ using ITensors.HDF5
 L = parse(Int, ARGS[1])
 sig_dims = parse(Int, ARGS[2])
 tau_dims = parse(Int, ARGS[3])
+
+
 D_a = 10;
 D_c = 1;
 

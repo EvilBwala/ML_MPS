@@ -1,3 +1,22 @@
+"""
+This code creates appropriate training data from raw data files and stores them in a folder named Training_Data
+INPUT:
+ARGS[1] = L is the length of patterns
+ARGS[2] = sig_dims is the dimensionsionality of the spins e.g  2 for Michael's system
+ARGS[3] = tau_dims is the dimensionality of the feature space output which is 2 for our case
+ARGS[4] = D is the maximum bond dimension of the psi input to be created
+ARGS[5] = raw_datfile is the name of the file containing raw data
+            It is supposed to be a npz file containing "Pattern_list" and "Protocol"
+            as dictionary indices for the Patetrn data and the protocol at the last n sites.
+ARGS[6] = eta is the step size of the gradient descent for finding optimal psi
+ARGS[7] = max_steps is the maximum steps for which the optimal psi algo is run
+ARGS[8] = tolerance is the error tolerance for building psi
+OUTPUT:
+The codes builds psi and the feature space output y
+These are stored in a HDF5 file in the folder Training_Data
+Psi is stored at distionary index psi and y is tored at dictionary index y
+"""
+
 using ITensors
 using ITensors.HDF5
 using Distributions
