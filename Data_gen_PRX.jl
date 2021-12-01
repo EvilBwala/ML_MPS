@@ -111,11 +111,12 @@ end
 This function constructs the optimal psi given data in the form of a vector of vectors
 """
 
-function find_optimal_psi(v_data::Vector{Vector{Int64}}, dim_of_spins::Int64, D::Int64, eta::Float64, tolerance::Float64, max_steps::Int64)
+function find_optimal_psi(v_data::Vector{Vector{Int64}}, psi::MPS, D::Int64, eta::Float64, tolerance::Float64, max_steps::Int64)
+    N_data = length(v_data);
+    """
     #--------------------------------------------------------------------------------------------------------------
     # Creating a random psi
     #--------------------------------------------------------------------------------------------------------------
-    N_data = length(v_data);
     L = length(v_data[1]);
 
     sig_dims = dim_of_spins;
@@ -141,7 +142,7 @@ function find_optimal_psi(v_data::Vector{Vector{Int64}}, dim_of_spins::Int64, D:
     #-----------------------------------------------------------------------------------------------------------------
     # Random psi with appropriate indices created
     #-----------------------------------------------------------------------------------------------------------------
-
+    """
     err = 1;
     s_ent = shannon_ent(v_data);
 

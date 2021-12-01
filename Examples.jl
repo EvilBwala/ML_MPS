@@ -5,10 +5,13 @@ So the examples need to be run independently.
 """
 
 
-"""
+
 using ITensors
 using LinearAlgebra
+using Distributions
 include("MPS_functions.jl")
+include("Data_gen_PRX.jl")
+
 
 #---------------------------------------------------------------------------------------------------------------------------------------
 L = 10;
@@ -64,22 +67,43 @@ tolerance = 0.01;
 max_steps = 100;
 W = find_optimal_W(X, Y, D, alpha, eta, tolerance, max_steps)
 
-"""
 #---------------------------------------------------------------------------------------------------------------------------------------
 
+L = 10
+sig_dims = 2
+tau_dims = 2
+D = 20
 
-using ITensors
-using LinearAlgebra
-using Distributions
-include("Data_gen_PRX.jl")
+f = h5open("IO_Templates/xy_template.L$L.sig$sig_dims.tau$tau_dims.h5","r");
+x_template = read(f, "x_template", MPS);
+y_template = read(f, "y_template", MPS);
 
 
-L = 10;
+W_linkers = [min(Int(2^(i-1)), D) for i in 1:L/2+1];
+psi_linkers = [W_linkers[1:end-1] ; reverse(W_linkers)];
+
+ind_sig = Array{Index}(undef, L);
+ind_a = Array{Index}(undef, L+1);
+
+for i in 1:L+1
+    if (i<L+1)  ind_sig[i] = inds(x_template[i], "x")[1]; end #Index for inputs same as that of x_template
+    ind_a[i] = Index(psi_linkers[i], "xlink"); #Linker indices for X
+    if (i == 1 || i == L+1)  ind_a[i] = addtags(ind_a[i], "bdary"); end # Boundary linkers have an extra tag
+end
+psi = MPS(L);
+for i in 1:L
+    psi[i] = randomITensor(ind_sig[i], ind_a[i], ind_a[i+1]); # psi is a MPS now
+    #psi[i] = onehot(ind_sig[i]=>1, ind_a[i]=>1, ind_a[i+1]=>1)
+end
+Z = inner(psi, psi);
+psi = (1/sqrt(Z))*psi;
+psi = orthogonalize(psi, 1);
+println("psi initialized successfully");
+
+
 b = Binomial();
 v_data = [rand(b, L) .+ 1 for i in 1:100];
-dim_of_spins = 2;
-D = 20;
 eta = 0.01;
-max_steps = 1000;
+max_steps = 100;
 tolerance = 1E-3;
-psi = find_optimal_psi(v_data, dim_of_spins, D, eta, tolerance, max_steps)
+psi = find_optimal_psi(v_data, psi, D, eta, tolerance, max_steps);
