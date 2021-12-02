@@ -9,11 +9,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 from numba import jit
 from math import exp, log, cos, cosh, sqrt, sinh, pi
+from time import process_time, time
+from joblib import Parallel, delayed
+
+
+def last_n_nonzero(M, n):
+    '''
+    For a matrix M of m by N, 
+    return a matrix of m by n by removing the zero at the end of each row and keep the last n element 
+    '''
+    m, N = M.shape
+    New_M = np.zeros((m, n))
+    for i in range(m):
+        row_i = np.trim_zeros(M[i], 'b')
+        New_M[i] = row_i[-n:]
+    return New_M   
+
 
 @jit(nopython=True)
-def tRSSA_TD_1DChain(T, dmu, h, initial_chain=np.random.choice([-1,1], size=1000),
-               P_gen_kj=np.ones((2,2))*0.5, J=4,
-               Periods = 50, t_intervals = None, track_size = 10000):
+def TD_1DChain(T, dmu, h, t_max = 50*1000, t_save_intervals = None,
+               initial_chain=np.random.choice([2,1], size= 1000),
+               P_gen_kj=np.ones((2,2))*0.5, J=4, seed = None,
+               prop_t_bounds = None, track_size = 2000, keep_size = 1000):
     '''
     Time-dependent rejection-based SSA (tRSSA)
     
@@ -34,7 +51,13 @@ def tRSSA_TD_1DChain(T, dmu, h, initial_chain=np.random.choice([-1,1], size=1000
     initial_chain_size: size for the initial bulk
     
     
-    Periods: number of periods to simulate 
+    t_max: number of 
+    to simulate 
+    Burn_in_Periods: Statistics here will not be tracked
+    
+    prop_t_bounds: time for propensity bounds of the tRSSA algorithm
+    
+    
     
     there are 6 reactions
     1: -1 -> -1 1
@@ -44,42 +67,42 @@ def tRSSA_TD_1DChain(T, dmu, h, initial_chain=np.random.choice([-1,1], size=1000
     5: 1 -> 1 -1
     6: 1 -> 
     
+    Map the -1 to 2 for speed reasons
+    
     Returns
     -------
     Timestamps and Changes of 1D-Chain
     '''     
-
-    #Track the change of the 1D-Chain
-    Chain_Changes = np.zeros(track_size)
-    cc_i = 1000
+    #np.random.seed(seed)
+    
+    #initial chain
+    initial_chain[-1] = 2
+    initial_chain[-2] = 1
+    #outmost blocks
+    nj = 2
+    ni = 1
     
     #track chain configuration
-    initial_chain[-1] = -1
-    initial_chain[-2] = 1
-    chain = np.zeros(track_size)
-    chain[0:1000] = initial_chain
-    chain_length= len(chain)
-    c_i = 1000
+    chain = np.zeros(track_size, dtype=np.uint8)
+    chain[0:keep_size] = initial_chain.astype(np.uint8)
+    chain_length= keep_size
+    c_i = keep_size-1
     
-    #outmost blocks
-    nj = initial_chain[-1]
-    ni = initial_chain[-2]
+    add_move = 0
+    rem_move = 0
+    
     
     #track time
-    reaction_time = np.zeros(track_size)
+    addition_reaction_time = np.zeros(track_size,dtype=np.float64)
     rt_i = 0
     
-    t_max = T*Periods
-    #print(t_max)
     t_rn = 0
-    t_next = t_intervals[1]
-    dt = ts[1]
-
-    #track time
-    i = 1
+    prop_t_next = prop_t_bounds[1]
+    #track propensity time
+    prop_t_i = 1
+    #track save t_i
+    save_t_i = 0
         
-    #print(t_intervals)    
-    #print(t_next)
     
     #calculate chemical potential and rate constant for adding a spin
     mu_eq0 = log(2/(exp(J)*(cosh(h)+sqrt(exp(-4*J)+sinh(h)**2))))
@@ -101,43 +124,50 @@ def tRSSA_TD_1DChain(T, dmu, h, initial_chain=np.random.choice([-1,1], size=1000
     a_lb[1] = a2
     a_ub[1] = a2
     #removal of -1
-    #if h is positive, initial signal for boundary = 1 -1 is decreasing
-    if h > 0:
-        a_lb[2] = exp(-J*ni*nj-h*np.cos(2*pi*t_next/T)*nj)
-        a_ub[2] = exp(-J*ni*nj-h*np.cos(2*pi*0/T)*nj)
-    else:
-        a_lb[2] = exp(-J*ni*nj-h*np.cos(2*pi*0/T)*nj) 
-        a_ub[2] = exp(-J*ni*nj-h*np.cos(2*pi*t_next/T)*nj)
+    remove_cons = exp(J)
+    signals = remove_cons*np.array([exp(h*cos(2*pi*prop_t_next/T)), exp(h*cos(2*pi*t_rn/T))])
+    a_lb[2] = np.min(signals)
+    a_ub[2] = np.max(signals) 
     a0_ub = np.sum(a_ub)
+    
+    
+    #save signals, patterns, associated with the last n
+    patterns_save = np.zeros((len(t_save_intervals), track_size), dtype=np.uint8)
+    #signals_save = np.zeros((int(Periods-Burn_in_Periods), track_size))
+    addition_reaction_time_save = np.zeros((len(t_save_intervals), track_size), dtype=np.float64)
     
     
     while t_rn < t_max:
         
-        #print(a_ub)
         
+        t_before = t_rn
         tau = -1/a0_ub*log(np.random.random())
         t_rn = t_rn+tau
-        #print(t_rn, t_next)
-       
         
-        if t_rn > t_next:
-            t_rn = t_next
-            i = i+1
-            t_next = ts[i]
+        
+        
+        #check if we should save the patterns now
+        if t_before < t_save_intervals[save_t_i] and t_rn > t_save_intervals[save_t_i]:
+            patterns_save[save_t_i] = chain
+            addition_reaction_time_save[save_t_i] = addition_reaction_time
+            save_t_i += 1
+        
+        if t_rn > t_max:
+            break;
+        
+        if t_rn > prop_t_next:
+            t_rn = prop_t_next
+            prop_t_i += 1 
+            prop_t_next = prop_t_bounds[prop_t_i]
             
-            #check if the signal is in first or second half
-            first_half_T = True
-            if np.floor(t_rn/(T/2))%2 == 1:
-                first_half_T = False
-            
-            nj = chain[-1]
-            ni = chain[-2]
-            
+            nj = chain[c_i]
+            ni = chain[c_i-1]
+        
             #update propensity bounds
             a_lb = np.zeros(6)
             a_ub = np.zeros(6)
             
-            if nj == -1:
+            if nj == 2:
                 #add 1 to -1
                 a1 = additon_a_matrix[0,1]
                 a_lb[0] = a1
@@ -156,47 +186,29 @@ def tRSSA_TD_1DChain(T, dmu, h, initial_chain=np.random.choice([-1,1], size=1000
                 a_lb[4] = a5
                 a_ub[4] = a5
             
-            if h > 0:
-                if nj == -1:
-                    #decresing signal for removal 
-                    if first_half_T:
-                        a_lb[2] = exp(-J*ni*nj-h*np.cos(2*pi*t_next/T)*nj)
-                        a_ub[2] = exp(-J*ni*nj-h*np.cos(2*pi*t_rn/T)*nj)
-                    #incresing signal
-                    else:
-                        a_lb[2] = exp(-J*ni*nj-h*np.cos(2*pi*t_rn/T)*nj)
-                        a_ub[2] = exp(-J*ni*nj-h*np.cos(2*pi*t_next/T)*nj)
-                else:
-                    #increasing signal for removal
-                    if first_half_T:
-                        a_lb[5] = exp(-J*ni*nj-h*np.cos(2*pi*t_rn/T)*nj)
-                        a_ub[5] = exp(-J*ni*nj-h*np.cos(2*pi*t_next/T)*nj)
-                    #decreasing signal for removal
-                    else:
-                        a_lb[5] = exp(-J*ni*nj-h*np.cos(2*pi*t_next/T)*nj)
-                        a_ub[5] = exp(-J*ni*nj-h*np.cos(2*pi*t_rn/T)*nj)
+            #compute removal propensity bounds
+            if ni == 2 and nj == 2:
+                remove_cons = exp(-J)
+            elif ni == 1 and nj == 1:
+                remove_cons = exp(-J)
             else:
-                if nj == -1:
-                    #inscreasing signal for removal 
-                    if first_half_T:
-                        a_lb[2] = exp(-J*ni*nj-h*np.cos(2*pi*t_rn/T)*nj) 
-                        a_ub[2] = exp(-J*ni*nj-h*np.cos(2*pi*t_next/T)*nj)
-                    #incresing signal
-                    else:
-                        a_lb[2] = exp(-J*ni*nj-h*np.cos(2*pi*t_next/T)*nj)
-                        a_ub[2] = exp(-J*ni*nj-h*np.cos(2*pi*t_rn/T)*nj)
-                else:
-                    #decreasing signal for removal
-                    if first_half_T:
-                        a_lb[5] = exp(-J*ni*nj-h*np.cos(2*pi*t_next/T)*nj) 
-                        a_ub[5] = exp(-J*ni*nj-h*np.cos(2*pi*t_rn/T)*nj)
-                    #decreasing signal for removal
-                    else:
-                        a_lb[5] = exp(-J*ni*nj-h*np.cos(2*pi*t_rn/T)*nj)
-                        a_ub[5] = exp(-J*ni*nj-h*np.cos(2*pi*t_next/T)*nj)
+                remove_cons = exp(J)
+                
+            if nj == 2:
+                signals = remove_cons*np.array([exp(h*cos(2*pi*prop_t_next/T)), exp(h*cos(2*pi*t_rn/T))])
+            else:
+                signals = remove_cons*np.array([exp(-h*cos(2*pi*prop_t_next/T)), exp(-h*cos(2*pi*t_rn/T))])
+                
+            if nj == 2:
+                a_lb[2] = np.min(signals)
+                a_ub[2] = np.max(signals)   
+            else:
+                a_lb[5] = np.min(signals)
+                a_ub[5] = np.max(signals)
             continue;
         
-        
+        nj = chain[c_i]
+        ni = chain[c_i-1]
         #compare propensity to choose a reaction
         aj_ub_sums = np.zeros(6)
         aj_ub_sums[0] = a_ub[0]
@@ -205,6 +217,7 @@ def tRSSA_TD_1DChain(T, dmu, h, initial_chain=np.random.choice([-1,1], size=1000
         r2 = np.random.random()
         r2a0_ub = r2*aj_ub_sums[-1]
         arg = 0
+        #pick the reaction
         for j in range(6):
             if aj_ub_sums[j] > r2a0_ub:
                 arg = j
@@ -212,16 +225,23 @@ def tRSSA_TD_1DChain(T, dmu, h, initial_chain=np.random.choice([-1,1], size=1000
         
         #check if the reaction should occur
         Accept = False
-        r3 = np.random.random()   
+        r3 = np.random.random() 
         if r3 <= (np.sum(a_lb)/np.sum(a_ub)):
             Accept = True
         else:
             #evaluate propensity of current state
             a0 = 0
-            if nj == -1:
-                a0 = additon_a_matrix[0,1]+additon_a_matrix[0,0]+exp(-J*ni*nj-h*np.cos(2*pi*t_rn/T)*nj)
+            if ni == 2 and nj == 2:
+                remove_cons = exp(-J)
+            elif ni == 1 and nj == 1:
+                remove_cons = exp(-J)
             else:
-                a0 = additon_a_matrix[1,1]+additon_a_matrix[1,0]+exp(-J*ni*nj-h*np.cos(2*pi*t_rn/T)*nj)
+                remove_cons = exp(J)
+                
+            if nj == 2:
+                a0 = additon_a_matrix[0,1]+additon_a_matrix[0,0]+remove_cons*exp(+h*cos(2*pi*t_rn/T))
+            else:
+                a0 = additon_a_matrix[1,1]+additon_a_matrix[1,0]+remove_cons*exp(-h*cos(2*pi*t_rn/T))
             if r3 <= (a0/np.sum(a_ub)):
                 Accept = True
         
@@ -229,49 +249,105 @@ def tRSSA_TD_1DChain(T, dmu, h, initial_chain=np.random.choice([-1,1], size=1000
             #choose a reaction
             #add +1
             if arg == 0 or arg == 3:
+                #update chains
                 chain_length += 1
-                ni = nj
-                nj = 1
-                Chain_Changes[cc_i] = 1 
-                chain[c_i] = 1
                 c_i += 1
-                cc_i += 1
+                chain[c_i] = 1
+                
+                #update time
+                addition_reaction_time[rt_i] = t_rn
+                rt_i += 1
+                
+                add_move += 1
                 
                 
             #add -1
             elif arg == 1 or arg == 4:
+                #update chains
                 chain_length += 1
-                ni = nj
-                nj = -1
-                Chain_Changes[cc_i] = -1 
-                chain[c_i] = -1
                 c_i += 1
-                cc_i += 1
+                chain[c_i] = 2
+                
+                #update time
+                addition_reaction_time[rt_i] = t_rn
+                rt_i += 1
+                
+                add_move += 1
+                
             #removal
             else:
                 chain_length -= 1
+                #remove the spin from chain
+                chain[c_i] = 0
                 c_i -= 1
                 nj = chain[c_i]
                 ni = chain[c_i-1]
-                Chain_Changes[cc_i] = 2 
-                cc_i += 1
                 
-            reaction_time[rt_i] = t_rn
-            rt_i += 1
-            
-            if Chain_Changes[-1] != 0:
-                Chain_Changes[0:1000] = Chain_Changes[-1000:]
-                Chain_Changes[1000:] = np.zeros(track_size-1000)
-                cc_i = 1000
-            if reaction_time[-1] > 0:
-                reaction_time[0:1000] = reaction_time[-1000:]
-                reaction_time[1000:] = np.zeros(track_size-1000)
-                rt_i = 1000
+                rem_move += 1
+                            
             if chain[-1] != 0:
-                chain[0:1000] = chain[-1000:]
-                chain[1000:] = np.zeros(track_size-1000)
-                #print(t_rn, chain_length)
-                c_i = 1000
+                chain[:keep_size] = chain[-keep_size:]
+                chain[keep_size:] = np.zeros(track_size-keep_size)
+                c_i = keep_size-1
+            if addition_reaction_time[-1] > 0:
+                addition_reaction_time[0:keep_size] = addition_reaction_time[-keep_size:]
+                addition_reaction_time[keep_size:] = np.zeros(track_size-keep_size)
+                rt_i = keep_size
             
-            
-    return chain_length, chain, Chain_Changes, reaction_time
+    #print(add_move, rem_move)
+    return chain_length, patterns_save, addition_reaction_time_save
+   
+def tSRRA_1D_Chain_Process(T, h, t_max, t_burn_in, num_t_save_intervals, J=4, dmu=7, last_n = 100, save='', save_n = 0):
+    prop_t_bounds = np.linspace(0, t_max, num=t_max*10+1)
+    t_save_intervals = np.linspace(t_burn_in, t_max, num=num_t_save_intervals)
+    
+    chain_length, patterns, addition_reaction_time = TD_1DChain(T, dmu, h, t_max = t_max,
+                                                                        prop_t_bounds=prop_t_bounds,
+                                                                        t_save_intervals = t_save_intervals)
+        
+    patterns_save = last_n_nonzero(patterns, last_n)
+    addition_reaction_time_save = last_n_nonzero(addition_reaction_time, last_n)
+    
+    vals_to_save = {'chain_length':chain_length,
+                        'patterns': patterns_save, 'addition_reaction_time': addition_reaction_time_save}
+    save_str = 'data/' + save+ '_T='+str(T)+'_h='+str(h)+'_'+str(save_n)
+    np.savez(save_str, **vals_to_save)
+    
+    
+def Run_tSRRA_1D_Chain_Process(Ts, hs, t_max, num_save, trials = 100,
+                               t_burn_in = 30*1000, J=4, dmu=7, 
+                               last_n = 100, 
+                               n_jobs = 1, save=''):
+    for T in range(len(Ts)):
+        T_i = Ts[T]
+        for h in range(len(hs)):
+            h_i = hs[h]
+            Parallel(n_jobs=n_jobs)(delayed(tSRRA_1D_Chain_Process)(T_i, h_i, t_max, t_burn_in, num_save, 
+              J=J, dmu=dmu, last_n = last_n, save=save, save_n = i) for i in range(trials))      
+    
+    
+def bits_patterns(n):
+    '''
+    Generate all patterns of 1&-1's of size n
+    '''
+    ps = ['-1', '1']
+    for i in range(n-1):
+        ps_temp = []
+        for i in range(len(ps)):
+            ps_temp.append(ps[i]+'-1')
+            ps_temp.append(ps[i]+'1')
+        ps = ps_temp
+    return ps  
+
+def bits_pattern_dict(n):
+    two_to_n = 2**n
+    n_bits_patterns = bits_patterns(n)
+    #create a dictionary to store patterns index
+    n_bits_patterns_dict = {}
+    for i in range(two_to_n):
+        n_bits_patterns_dict[n_bits_patterns[i]] = i
+    return n_bits_patterns_dict
+    
+    
+    
+                              
