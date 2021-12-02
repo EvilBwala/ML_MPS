@@ -2,15 +2,22 @@ First run the Create_Input_Output_templates.jl file to generate appropriate temp
 
 julia Create_Input_Output_templates.jl $L $sig_dims $tau_dims
 
+Next run the Gen_random_raw_data.jl file to create random raw data
+
+julia Gen_random_raw_data.jl $L $sig_dims $tau_dims $num_signals $num_trials $Raw_data_folder_name
+
 
 Next run the Create_training_data.jl file to create appropriate training data. This step should be run on the cluster as every raw data file is going to provide a separate training data. So everything can be run in parallel in this step.
 
-julia Create_training_data.jl $L $sig_dims $tau_dims $D $raw_datfile $eta $max_steps $tolerance
+julia Create_training_data.jl $L $sig_dims $tau_dims $D $raw_datafolder $raw_datfile $eta $max_steps $tolerance $training_datafolder
 
+As it is now, the feature space for the output as is coded in the Create_training_data.jl file corresponds to $tau_dims = 2. For different $tau_dims, make appropriate changes in this file to variable "vy_feature".
+
+(NOTE: $raw_datafolder and $Raw_data_folder_name should be the same)
 
 Finally run the Create_Optimal_MPO.jl file
 
-julia Create_Optimal_MPO.jl $training_datafolder $D $alpha $eta $tolerance $max_steps
+julia Create_Optimal_MPO.jl $training_datafolder $D $alpha $eta $tolerance $max_steps1 $max_steps2 $ncycles
 
 
 Please read the documentation of these three Create* files to understand the variables sig_dims, tau_dims, D etc.
