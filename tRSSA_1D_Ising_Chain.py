@@ -11,6 +11,9 @@ from numba import jit
 from math import exp, log, cos, cosh, sqrt, sinh, pi
 from time import process_time, time
 from joblib import Parallel, delayed
+from tqdm import tqdm
+import os
+import pathlib
 
 
 def last_n_nonzero(M, n):
@@ -297,9 +300,9 @@ def TD_1DChain(T, dmu, h, t_max = 50*1000, t_save_intervals = None,
     #print(add_move, rem_move)
     return chain_length, patterns_save, addition_reaction_time_save
    
-def tSRRA_1D_Chain_Process(T, h, t_max, t_burn_in, num_t_save_intervals, J=4, dmu=7, last_n = 100, save='', save_n = 0):
+def tSRRA_1D_Chain_Process(T, h, t_max, t_burn_in, t_save_intervals, J=4, dmu=7, last_n = 20, save='', save_n = 0):
     prop_t_bounds = np.linspace(0, t_max, num=t_max*10+1)
-    t_save_intervals = np.linspace(t_burn_in, t_max, num=num_t_save_intervals)
+    #t_save_intervals = np.linspace(t_burn_in, t_max, num=num_t_save_intervals)
     
     chain_length, patterns, addition_reaction_time = TD_1DChain(T, dmu, h, t_max = t_max,
                                                                         prop_t_bounds=prop_t_bounds,
@@ -308,24 +311,81 @@ def tSRRA_1D_Chain_Process(T, h, t_max, t_burn_in, num_t_save_intervals, J=4, dm
     patterns_save = last_n_nonzero(patterns, last_n)
     addition_reaction_time_save = last_n_nonzero(addition_reaction_time, last_n)
     
+    #compute average velocity (for the last n additions)
+    avg_velocity_save = average_velocity(T, h, addition_reaction_time_save, t_save_intervals)
+    
+    
     vals_to_save = {'chain_length':chain_length,
-                        'patterns': patterns_save, 'addition_reaction_time': addition_reaction_time_save}
-    save_str = 'data/' + save+ '_T='+str(T)+'_h='+str(h)+'_'+str(save_n)
+                    'patterns': patterns_save, 
+                    'addition_reaction_time': addition_reaction_time_save,
+                    'average_velocity': avg_velocity_save}
+    
+    save_str = save[1:]+'\T='+str(T)+'_h='+str(h)+'_'+str(save_n)
+    print(save_str)
     np.savez(save_str, **vals_to_save)
     
     
 def Run_tSRRA_1D_Chain_Process(Ts, hs, t_max, num_save, trials = 100,
                                t_burn_in = 30*1000, J=4, dmu=7, 
-                               last_n = 100, 
+                               last_n = 20, 
                                n_jobs = 1, save=''):
-    for T in range(len(Ts)):
-        T_i = Ts[T]
-        for h in range(len(hs)):
-            h_i = hs[h]
-            Parallel(n_jobs=n_jobs)(delayed(tSRRA_1D_Chain_Process)(T_i, h_i, t_max, t_burn_in, num_save, 
-              J=J, dmu=dmu, last_n = last_n, save=save, save_n = i) for i in range(trials))      
     
     
+    #create the directory if it does not exist
+    path = str(pathlib.Path().resolve())
+    save_path = path+save
+    isExist = os.path.exists(save_path)
+    if not isExist:
+        os.makedirs(save_path)
+        
+    t_save_intervals = np.linspace(t_burn_in, t_max, num=num_save)    
+    
+    for T in Ts:
+        for h in hs:
+            Parallel(n_jobs=n_jobs)(delayed(tSRRA_1D_Chain_Process)(T, h, t_max, t_burn_in, t_save_intervals, 
+              J=J, dmu=dmu, last_n = last_n, save=save, save_n = i) for i in tqdm(range(trials)))     
+            
+    #compute an ensemble average velocity and the protocol
+    for T in Ts:
+        for h in hs:
+            avg_vel_Th = np.zeros(num_save)
+            for i in range(trials):
+                avg_vel_Th_i = np.load(save_path+'\T='+str(T)+'_h='+str(h)+'_'+str(i)+'.npz')['average_velocity']
+                avg_vel_Th = np.add(avg_vel_Th, avg_vel_Th_i)
+            avg_vel_Th = avg_vel_Th/trials
+            protocol, addition_time = protocol_from_average_velocity(T, h, avg_vel_Th, t_save_intervals, last_n)
+            vals_to_save = {'protocol': protocol, 'addition_time':addition_time, 'average_velocity':avg_vel_Th}
+            save_str = save[1:]+'\Protocol_T='+str(T)+'_h='+str(h)
+            np.savez(save_str, **vals_to_save)
+    
+
+def average_velocity(T, h, addition_reaction_time, t_save_intervals):
+    last_n = len(addition_reaction_time[0])
+    num_t_save_intervals = len(t_save_intervals)
+    avg_vel = np.zeros(num_t_save_intervals)
+    for i in range(num_t_save_intervals):
+        #velocity = number of blcoks/time interval
+        avg_vel[i] = last_n/(addition_reaction_time[i][-1]-addition_reaction_time[i][0])
+    return avg_vel
+
+def protocol_from_average_velocity(T, h, average_velocity, t_save_intervals, last_n):
+    '''
+    Using the ensemble (T, h) average average-velocity to estimate signal 
+    '''
+    num_t_save_intervals = len(t_save_intervals)
+    protocol = np.zeros( (num_t_save_intervals, last_n))
+    approximate_addition_time = np.zeros( (num_t_save_intervals, last_n))
+    for i in range(num_t_save_intervals):
+        inv_avg_vel_i =  1/average_velocity[i]
+        #compute the approximated addition time using average velocity
+        approximate_addition_time[i, -1] = t_save_intervals[i]
+        for j in range(2, last_n+1):
+            approximate_addition_time[i, -j] = approximate_addition_time[i, -j+1] - inv_avg_vel_i
+        protocol = h*np.cos(2*pi/T*approximate_addition_time)
+            
+    return protocol, approximate_addition_time
+        
+
 def bits_patterns(n):
     '''
     Generate all patterns of 1&-1's of size n
