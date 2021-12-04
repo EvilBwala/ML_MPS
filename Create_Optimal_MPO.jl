@@ -85,6 +85,6 @@ else
     mkdir("Optimal_W_MPOs");
 end
 
-f = h5open("Optimal_W_MPOs/Optimal_W.h5","w")
-write(f,"Optimal_W",W)
+f = h5open("Optimal_W_MPOs/Optimal_W.L$L.D$D.alpha$alpha.h5","w")
+write(f,"Optimal_W", W, "Error", err)
 close(f)
