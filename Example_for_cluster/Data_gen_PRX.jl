@@ -145,7 +145,7 @@ function find_optimal_psi(v_data::Vector{Vector{Int64}}, psi::MPS, D::Int64, eta
     """
     err = 1;
     s_ent = shannon_ent(v_data);
-
+    println("Shannon entropy of data is ", s_ent)
     steps = 0;
     while (abs(err)>tolerance && steps<max_steps)
         s = [(psi_v(psi, v)[])/sqrt(inner(psi, psi)) for v in v_data];
@@ -157,3 +157,51 @@ function find_optimal_psi(v_data::Vector{Vector{Int64}}, psi::MPS, D::Int64, eta
     end
     return psi
 end
+
+#-------------------------------------------------------------------------------------------------------------------------
+# Create simple training data 
+#-------------------------------------------------------------------------------------------------------------------------
+
+function simple_training_data(x_template::MPS, y_template::MPS, vx_data::Union{Matrix, Vector}, vy_data::Matrix)::Tuple{MPS, MPS}
+    L = length(x_template);
+    #-------------------------------------------------------------------------------------------------------------------
+    # Creating indices for MPS x and y
+    D_a = 1
+    a_linkers = [min(Int(2^(i-1)), D_a) for i in 1:L/2+1];
+    a_linkers = [a_linkers[1:end-1] ; reverse(a_linkers)];
+    D_c = 1;
+    c_linkers = [min(Int(2^(i-1)), D_c) for i in 1:L/2+1];
+    c_linkers = [c_linkers[1:end-1] ; reverse(c_linkers)];
+
+    ind_sig = Array{Index}(undef, L);
+    ind_a = Array{Index}(undef, L+1);
+    ind_tau = Array{Index}(undef, L);
+    ind_c = Array{Index}(undef, L+1);
+
+    for i in 1:L+1
+        if (i<L+1)  ind_sig[i] = inds(x_template[i], "x")[1]; end #Index for inputs same as that of x_template
+        ind_a[i] = Index(a_linkers[i], "xlink"); #Linker indices for X
+        if (i == 1 || i == L+1)  ind_a[i] = addtags(ind_a[i], "bdary"); end # Boundary linkers have an extra tag
+        
+        if i<L+1 ind_tau[i] = inds(y_template[i], "y")[1]; end #Index for outputs
+        ind_c[i] = Index(c_linkers[i], "ylink"); #Linker indices for Y
+        if (i == 1 || i == L+1) ind_c[i] = addtags(ind_c[i], "bdary"); end
+    end
+
+    y = MPS(L);
+    vy_feature = [[tanh(i), sech(i)] for i in vy_data];
+    for i in 1:L  y[i] = ITensor(vy_feature[i], ind_tau[i], ind_c[i], ind_c[i+1]); end
+
+    x = MPS(L);
+    vx_feature = [zeros(1,sig_dims) for i in vx_data];
+    for i in 1:L
+        vx_feature[i][vx_data[i]] = 1;
+        x[i] = ITensor(vx_feature[i], ind_sig[i], ind_a[i], ind_a[i+1]);
+    end
+
+    return x, y
+end
+
+
+    
+    

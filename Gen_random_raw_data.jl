@@ -28,8 +28,7 @@ else
 end
 
 for i in 1:num_signals
-    b = Binomial();
-    v_data = [rand(b, L) .+ 1 for i in 1:num_trials];
+    v_data = [rand(1:sig_dims, L) for i in 1:num_trials];
     v_arr = zeros(num_trials, L);
     for j in 1:num_trials
         v_arr[j, :] = v_data[j];
@@ -40,6 +39,6 @@ for i in 1:num_signals
     ns = rand(nr, L);
     ys = ys .+ 0.01 .* ns;
 
-    npzwrite("$Raw_data_folder_name/Raw_Data$i", Dict("Pattern_list" => v_arr, "Protocol" => ys));
+    npzwrite("$Raw_data_folder_name/Raw_Data$i.npz", Dict("Pattern_list" => v_arr, "Protocol" => ys));
     println("Random Data $i is created");
 end
