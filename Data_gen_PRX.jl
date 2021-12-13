@@ -162,7 +162,7 @@ end
 # Create simple training data 
 #-------------------------------------------------------------------------------------------------------------------------
 
-function simple_training_data(x_template::MPS, y_template::MPS, vx_data::Union{Matrix, Vector}, vy_data::Matrix)::Tuple{MPS, MPS}
+function simple_training_data(x_template::MPS, y_template::MPS, vx_data::Union{Matrix, Vector}, vy_data::Union{Matrix, Vector})::Tuple{MPS, MPS}
     L = length(x_template);
     #-------------------------------------------------------------------------------------------------------------------
     # Creating indices for MPS x and y

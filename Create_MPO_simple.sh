@@ -3,27 +3,27 @@
 # Filename information
 sourcefile=Create_Optimal_MPO_simple.jl    # Name of the julia file that creates the Optimal MPO
 sourcedirectory=ML_MPS              # Name of the folder which contains teh important files
-filename=Testing_ML                    # Name of directory where the Raw_datafolder exists. Place it at the same level at the ML_MPS folder
+filename=Testing_ML_40                    # Name of directory where the Raw_datafolder exists. Place it at the same level at the ML_MPS folder
 
 
 # Fixed simulation parameters
-raw_datafolder="Simple_Raw_Data"     # Name of the folder where all the Training data is stored
-L=10
-sig_dims=3
-tau_dims=2
-num_trials=4
-training_datafolder="Simple_TD"
-training_datafile="All_Data"
-Optimal_MPO_name="goodMPO"
-eta=0.01                                # Step-size for gradient descent
+raw_datafolder="Simple_Raw_Data"        # Name of the folder where all the Training data is stored
+L=20                                    # Length of the patterns
+sig_dims=2                              # sigma dimensions
+tau_dims=2                              # tau dimensions
+num_trials=4                            # Number of trials from the raw data to be considered
+training_datafolder="Simple_TD"         # Name of Training datafolder
+training_datafile="All_Data"            # Filename under which training data is to be stored
+Optimal_MPO_name="goodMPO"              # Name of fiel containing Optimal MPO
+eta=0.05                                # Step-size for gradient descent
 tolerance=0.01                          # Tolerance of error
-max_steps1=10                            # Steps for running find_optimal_W.jl
-max_steps2=10                            # Steps for running find_optimal_W_PRE.jl
-ncycles=10                               # Number of alternating cycles of the two algorithms
+max_steps1=5                           # Steps for running find_optimal_W.jl
+max_steps2=5                           # Steps for running find_optimal_W_PRE.jl
+ncycles=2                              # Number of alternating cycles of the two algorithms
 
 # Variable parameters
-Ds=(10 20) #40 80 160)                                 # Maximum Bond Dimensions of the MPO W
-alphas=(0.00000001)                         # The regularizer
+Ds=(20) #40 80 160)                  # Maximum Bond Dimensions of the MPO W
+alphas=(0.00000001)                     # The regularizer
 
 cd ..
 

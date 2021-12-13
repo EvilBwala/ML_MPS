@@ -21,11 +21,9 @@ num_signals = parse(Int, ARGS[4]);
 num_trials = parse(Int, ARGS[5]);
 Raw_data_folder_name = ARGS[6];
 
-if isdir(Raw_data_folder_name)
-    println("$Raw_data_folder_name folder already exists");
-else
-    mkdir(Raw_data_folder_name);
-end
+cd("..")
+if isdir(Raw_data_folder_name) println("$Raw_data_folder_name folder already exists");
+else mkdir(Raw_data_folder_name); end
 
 for i in 1:num_signals
     v_data = [rand(1:sig_dims, L) for i in 1:num_trials];

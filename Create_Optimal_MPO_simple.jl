@@ -53,10 +53,10 @@ Y_data = Vector{MPS}();
 for raw_data_file in raw_data_files
     raw_data = npzread("$raw_datafolder/$raw_data_file");
     v_arr = trunc.(Int, raw_data["Pattern_list"]);
-    v_data = [v_arr[i,:] for i in 1:size(v_arr)[1]];
+    v_data = [v_arr[i,1:L] for i in 1:size(v_arr)[1]];
     for k in 1:num_trials
         println("$raw_data_file Trial no. ", k);
-        vy_data = raw_data["Protocol"];
+        vy_data = raw_data["Protocol"][1:L];
         vx_data = v_data[k];
         x, y = simple_training_data(x_template, y_template, vx_data, vy_data)
         push!(X_data, x);
